@@ -16,7 +16,7 @@ function fetchVideos(duration) {
           const videos = (raw.items || []).map(item => ({
             id: item.id.videoId,
             title: item.snippet.title,
-            description: item.snippet.description,
+            description: item.snippet.description.split('\n')[0].replace(/https?:\/\/\S+/g, '').trim(),
             thumbnail: item.snippet.thumbnails.high.url,
             published: item.snippet.publishedAt,
             url: `https://www.youtube.com/watch?v=${item.id.videoId}`
