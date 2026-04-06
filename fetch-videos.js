@@ -4,6 +4,19 @@ const fs = require('fs');
 const API_KEY = process.env.YOUTUBE_API_KEY;
 const CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 
+function cleanDescription(desc) {
+  return desc
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/go to .{0,60}$/i, '')
+    .replace(/check out .{0,60}$/i, '')
+    .replace(/try .{0,60}$/i, '')
+    .replace(/➡️/g, '')
+    .replace(/[^\w\s.,!?'"()-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 120);
+}
+
 function fetchVideos(duration) {
   return new Promise((resolve, reject) => {
     const url = `https://www.googleapis.com/youtube/v3/search?key=${API_KEY}&channelId=${CHANNEL_ID}&part=snippet&order=date&maxResults=10&type=video&videoDuration=${duration}`;
@@ -16,7 +29,7 @@ function fetchVideos(duration) {
           const videos = (raw.items || []).map(item => ({
             id: item.id.videoId,
             title: item.snippet.title,
-            description: item.snippet.description.split('\n')[0].replace(/https?:\/\/\S+/g, '').trim(),
+            description: cleanDescription(item.snippet.description),
             thumbnail: item.snippet.thumbnails.high.url,
             published: item.snippet.publishedAt,
             url: `https://www.youtube.com/watch?v=${item.id.videoId}`
