@@ -6,11 +6,10 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 
-// Install youtube-transcript
 try {
   execSync('npm install youtube-transcript', { stdio: 'inherit' });
 } catch(e) {
-  console.log('Could not install youtube-transcript, will use title-based descriptions');
+  console.log('Could not install youtube-transcript');
 }
 
 function fetchVideos(duration) {
@@ -34,6 +33,33 @@ function fetchVideos(duration) {
       });
     }).on('error', reject);
   });
+}
+
+function fetchViewCounts(videoIds) {
+  return new Promise((resolve, reject) => {
+    const ids = videoIds.join(',');
+    const url = `https://www.googleapis.com/youtube/v3/videos?key=${YOUTUBE_API_KEY}&id=${ids}&part=statistics`;
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const raw = JSON.parse(data);
+          const counts = {};
+          (raw.items || []).forEach(item => {
+            counts[item.id] = parseInt(item.statistics.viewCount || 0);
+          });
+          resolve(counts);
+        } catch(e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function formatViews(count) {
+  if (count >= 1000000) return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M views';
+  if (count >= 1000) return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K views';
+  return count + ' views';
 }
 
 async function fetchTranscript(videoId) {
@@ -77,7 +103,7 @@ Rules:
 - Short and punchy
 - No em dashes
 - No words like: pivotal, vital, groundbreaking, transformative, underscores, highlights, showcasing, fostering, exploring, delving, testament, landscape, crucial, significant
-- No phrases like "get into", "take a look", "dive into", "break down", "shed light"
+- No phrases like "get into", "take a look", "dive into", "break down", "shed light", "here's what you need to know"
 - No promotional tone
 - Do not start with "This video"
 - No exclamation marks
@@ -107,8 +133,7 @@ Output the sentence only. Nothing else.`
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          const description = parsed.content[0].text.trim();
-          resolve(description);
+          resolve(parsed.content[0].text.trim());
         } catch(e) { reject(e); }
       });
     });
@@ -130,12 +155,17 @@ async function main() {
   const sorted = unique.sort((a, b) => new Date(b.published) - new Date(a.published));
   const top5 = sorted.slice(0, 5);
 
+  const videoIds = top5.map(v => v.id);
+  const viewCounts = await fetchViewCounts(videoIds);
+  top5.forEach(v => {
+    v.views = formatViews(viewCounts[v.id] || 0);
+  });
+
   console.log('Fetching transcripts and generating descriptions...');
   for (const video of top5) {
     const transcript = await fetchTranscript(video.id);
-    console.log(`Transcript for "${video.title}": ${transcript ? transcript.substring(0, 80) + '...' : 'none'}`);
     video.description = await generateDescription(video.title, transcript);
-    console.log(`Description: "${video.description}"`);
+    console.log(`"${video.title}" -> ${video.views} -> "${video.description}"`);
   }
 
   fs.writeFileSync('videos.json', JSON.stringify(top5, null, 2));
