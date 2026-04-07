@@ -1,9 +1,17 @@
 const https = require('https');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
+
+// Install youtube-transcript
+try {
+  execSync('npm install youtube-transcript', { stdio: 'inherit' });
+} catch(e) {
+  console.log('Could not install youtube-transcript, will use title-based descriptions');
+}
 
 function fetchVideos(duration) {
   return new Promise((resolve, reject) => {
@@ -28,32 +36,54 @@ function fetchVideos(duration) {
   });
 }
 
-function generateDescription(title) {
+async function fetchTranscript(videoId) {
+  try {
+    const { YoutubeTranscript } = require('youtube-transcript');
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+    const text = transcript
+      .map(t => t.text)
+      .join(' ')
+      .replace(/\[.*?\]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text.substring(0, 800);
+  } catch(e) {
+    console.log(`No transcript for ${videoId}: ${e.message}`);
+    return null;
+  }
+}
+
+function generateDescription(title, transcript) {
   return new Promise((resolve, reject) => {
+    const context = transcript
+      ? `Video title: "${title}"\n\nOpening transcript (first ~800 characters):\n${transcript}`
+      : `Video title: "${title}"`;
+
     const body = JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 100,
+      max_tokens: 120,
       messages: [{
         role: 'user',
-        content: `Write a one-sentence description for a finance YouTube video titled: "${title}"
+        content: `Write a one-sentence description for a finance YouTube video.
 
-Your description must follow ALL of these rules:
-- One sentence, maximum 18 words
+${context}
+
+Rules:
+- One sentence only, maximum 20 words
+- Based on the actual content, not just the title
 - Sound like a real person wrote it, not an AI
 - Have a clear point of view or mild opinion
-- Be specific to this exact video topic, not generic
 - Use simple everyday words
-- Short and punchy, not flowing or elaborate
+- Short and punchy
 - No em dashes
 - No words like: pivotal, vital, groundbreaking, transformative, underscores, highlights, showcasing, fostering, exploring, delving, testament, landscape, crucial, significant
 - No phrases like "get into", "take a look", "dive into", "break down", "shed light"
-- No promotional tone whatsoever
+- No promotional tone
 - Do not start with "This video"
-- Do not end with a question
 - No exclamation marks
 
-Bad example: "This video explores the transformative implications of oil markets, highlighting their crucial role in the global economy."
-Good example: "Oil prices move everything else. Here is why that actually matters right now."
+Bad example: "This video explores the transformative implications of oil markets, highlighting their crucial role."
+Good example: "Oil prices move everything else, and this time the shift is coming from somewhere unexpected."
 
 Output the sentence only. Nothing else.`
       }]
@@ -100,14 +130,16 @@ async function main() {
   const sorted = unique.sort((a, b) => new Date(b.published) - new Date(a.published));
   const top5 = sorted.slice(0, 5);
 
-  console.log('Generating AI descriptions...');
+  console.log('Fetching transcripts and generating descriptions...');
   for (const video of top5) {
-    video.description = await generateDescription(video.title);
-    console.log(`"${video.title}" -> "${video.description}"`);
+    const transcript = await fetchTranscript(video.id);
+    console.log(`Transcript for "${video.title}": ${transcript ? transcript.substring(0, 80) + '...' : 'none'}`);
+    video.description = await generateDescription(video.title, transcript);
+    console.log(`Description: "${video.description}"`);
   }
 
   fs.writeFileSync('videos.json', JSON.stringify(top5, null, 2));
-  console.log('Saved', top5.length, 'videos with descriptions');
+  console.log('Done. Saved', top5.length, 'videos.');
 }
 
 main().catch(err => {
