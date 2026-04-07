@@ -14,7 +14,7 @@ try {
 
 function fetchVideos(duration) {
   return new Promise((resolve, reject) => {
-    const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&channelId=${CHANNEL_ID}&part=snippet&order=date&maxResults=10&type=video&videoDuration=${duration}`;
+    const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&channelId=${CHANNEL_ID}&part=snippet&order=date&maxResults=15&type=video&videoDuration=${duration}`;
     https.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -180,12 +180,12 @@ async function main() {
   const all = [...medium, ...long];
   const unique = all.filter((v, i, arr) => arr.findIndex(x => x.id === v.id) === i);
   const sorted = unique.sort((a, b) => new Date(b.published) - new Date(a.published));
-  const top5 = sorted.slice(0, 5);
+  const top9 = sorted.slice(0, 9);
 
-  const videoIds = top5.map(v => v.id);
+  const videoIds = top9.map(v => v.id);
   const videoData = await fetchViewCounts(videoIds);
 
-  top5.forEach(v => {
+  top9.forEach(v => {
     const data = videoData[v.id] || {};
     v.views = formatViews(data.views || 0);
     v.fullDescription = data.fullDescription || v.youtubeDescription || '';
@@ -193,15 +193,15 @@ async function main() {
   });
 
   console.log('Fetching transcripts and generating descriptions...');
-  for (const video of top5) {
+  for (const video of top9) {
     const transcript = await fetchTranscript(video.id);
     video.description = await generateDescription(video.title, video.fullDescription, transcript);
     delete video.fullDescription;
     console.log(`"${video.title}" -> ${video.views} -> "${video.description}"`);
   }
 
-  fs.writeFileSync('videos.json', JSON.stringify(top5, null, 2));
-  console.log('Done. Saved', top5.length, 'videos.');
+  fs.writeFileSync('videos.json', JSON.stringify(top9, null, 2));
+  console.log('Done. Saved', top9.length, 'videos.');
 }
 
 main().catch(err => {
