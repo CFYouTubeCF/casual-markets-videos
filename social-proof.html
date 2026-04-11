@@ -79,6 +79,7 @@ function sendHeight() {
 }
 window.addEventListener('load', sendHeight);
 window.addEventListener('resize', sendHeight);
+setInterval(sendHeight, 200);
 </script>
 
 </body>
