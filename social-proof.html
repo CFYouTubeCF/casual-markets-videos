@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<div style="font-family:'Rubik',sans-serif; background:#f8f7f4; padding:48px 40px; border-radius:12px; max-width:680px; margin:0 auto;">
+<div style="font-family:'Rubik',sans-serif; background:#f8f7f4; padding:48px 20px; border-radius:12px; max-width:680px; margin:0 auto;">
 
   <div style="display:flex; justify-content:center; margin-bottom:24px;">
     <div style="text-align:center; padding:0 40px; border-right:1px solid #ddd;">
@@ -79,7 +79,12 @@ function sendHeight() {
 }
 window.addEventListener('load', sendHeight);
 window.addEventListener('resize', sendHeight);
-setInterval(sendHeight, 200);
+var attempts = 0;
+var interval = setInterval(function() {
+  sendHeight();
+  attempts++;
+  if (attempts > 25) clearInterval(interval);
+}, 200);
 </script>
 
 </body>
